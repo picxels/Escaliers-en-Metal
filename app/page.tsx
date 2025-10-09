@@ -1,666 +1,550 @@
 "use client"
 
 import { Canvas } from "@react-three/fiber"
-import { OrbitControls, Environment, ContactShadows, useGLTF, useTexture } from "@react-three/drei"
-import { Suspense, useState, useEffect } from "react"
+import { OrbitControls, Environment, PerspectiveCamera, Grid } from "@react-three/drei"
+import { StairModule } from "@/components/StairModule"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { ArrowRight, Download, Share2 } from "lucide-react"
-import { Label } from "@/components/ui/label"
-import * as THREE from "three"
-import { getTextureById, getTextureMaps, getWoodTextures, getMetalTextures } from "@/lib/textures"
+import { Settings, Ruler, Palette, ShoppingCart, Download, Share2, Info, Wrench, Upload } from "lucide-react"
+import { useEffect, useState, Suspense } from "react"
+import Link from "next/link"
+import { getTextures } from "@/lib/textures"
+import { getAllCategories } from "@/lib/categories"
+import {
+  getAllModels,
+  loadModelConfiguration,
+  type ModelConfiguration,
+  type ComponentArraySettings,
+  type StairConfiguration,
+  calculatePosition,
+  getEffectiveCount,
+  createDefaultComponentSettings,
+  loadStairConfiguration,
+  saveStairConfiguration,
+} from "@/lib/models"
 
-// Generic StairModule component for GLTF models with textures
-function StairModule({
-  url,
-  textureId,
-  position = [0, 0, 0],
-  ...rest
-}: {
-  url: string
-  textureId: string
-  position?: [number, number, number]
-  [key: string]: any
-}) {
-  const { scene } = useGLTF(url)
-  const textureSet = getTextureById(textureId)
-  const textureMaps = useTexture(getTextureMaps(textureSet))
+export default function Home() {
+  const [isInitialized, setIsInitialized] = useState(false)
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
+  const [modelConfig, setModelConfig] = useState<ModelConfiguration | null>(null)
 
-  if (!textureSet) {
-    console.warn(`Texture set not found: ${textureId}`)
-    return <primitive object={scene.clone()} position={position} {...rest} />
-  }
+  const [globalScale, setGlobalScale] = useState(0.01)
+  const [globalArrayMultiplier, setGlobalArrayMultiplier] = useState(1.0)
+  const [componentSettings, setComponentSettings] = useState<Record<string, ComponentArraySettings>>({})
+  const [componentTextures, setComponentTextures] = useState<Record<string, string>>({})
+
+  const availableTextures = getTextures()
+  const categories = getAllCategories()
+  const allModels = getAllModels()
 
   useEffect(() => {
-    if (scene && textureMaps && textureSet) {
-      scene.traverse((obj) => {
-        if (obj.isMesh && obj.material) {
-          if (obj.material.isMeshStandardMaterial || obj.material.type === "MeshStandardMaterial") {
-            Object.assign(obj.material, textureMaps)
-            Object.assign(obj.material, textureSet.materialProps)
-            obj.material.needsUpdate = true
-          } else {
-            const newMaterial = new THREE.MeshStandardMaterial()
-            Object.assign(newMaterial, textureMaps)
-            Object.assign(newMaterial, textureSet.materialProps)
-            obj.material = newMaterial
-          }
-        }
-      })
+    console.log("🚀 Initializing main page with unified configuration...")
+
+    // Try to load unified configuration
+    const savedConfig = loadStairConfiguration()
+    if (savedConfig) {
+      console.log("📂 Found unified configuration:", savedConfig)
+
+      // Validate that the model exists
+      const modelExists = allModels.some((m) => m.id === savedConfig.modelId)
+      if (modelExists) {
+        setSelectedModelId(savedConfig.modelId)
+        setGlobalScale(savedConfig.globalScale)
+        setGlobalArrayMultiplier(savedConfig.globalArrayMultiplier)
+        setComponentSettings(savedConfig.componentSettings)
+        setComponentTextures(savedConfig.componentTextures)
+        console.log("✅ Restored unified configuration")
+      } else {
+        console.warn(`⚠️ Saved model "${savedConfig.modelId}" not found, using default`)
+        setSelectedModelId("limon-central-droit-droit")
+      }
+    } else {
+      // No saved config, use default
+      setSelectedModelId("limon-central-droit-droit")
     }
-  }, [scene, textureMaps, textureSet])
 
-  return <primitive object={scene.clone()} position={position} {...rest} />
-}
+    console.log("✅ Main page ready")
+    setIsInitialized(true)
+  }, [])
 
-// Limon Central stair components
-function LimonCentralBase({ textureId = "painted-metal", position = [0, 0, 0] }) {
-  return (
-    <StairModule
-      url="/models/limon_central/limon_central_droit_droit_base.glb"
-      textureId={textureId}
-      position={position}
-    />
-  )
-}
+  // Load model configuration when model changes
+  useEffect(() => {
+    if (!selectedModelId || !isInitialized) return
 
-function LimonCentralStep({ textureId = "painted-metal", position = [0, 0, 0] }) {
-  return (
-    <StairModule
-      url="/models/limon_central/limon_central_droit_droit_step.glb"
-      textureId={textureId}
-      position={position}
-    />
-  )
-}
+    console.log(`🔍 Loading model: ${selectedModelId}`)
+    const config = loadModelConfiguration(selectedModelId)
 
-function LimonCentralStep1({ textureId = "dark-cherry-wood", position = [0, 0, 0] }) {
-  return (
-    <StairModule
-      url="/models/limon_central/limon_central_droit_droit_step1.glb"
-      textureId={textureId}
-      position={position}
-    />
-  )
-}
+    if (config) {
+      setModelConfig(config)
 
-function LimonCentralTop({ textureId = "painted-metal", position = [0, 0, 0] }) {
-  return (
-    <StairModule
-      url="/models/limon_central/limon_central_droit_droit_top.glb"
-      textureId={textureId}
-      position={position}
-    />
-  )
-}
+      // Only set defaults if we don't have saved values
+      if (Object.keys(componentSettings).length === 0) {
+        setComponentSettings(createDefaultComponentSettings(config))
+        setComponentTextures(config.componentTextures || {})
+        setGlobalScale(config.defaultSettings?.globalScale || 0.01)
+      }
 
-// Individual GLTF components with fallback-first approach
-function StairBase() {
-  const { scene } = useGLTF("/models/limon_central/limon_central_droit_droit_base.glb")
-  try {
-    return <primitive object={scene.clone()} />
-  } catch (error) {
-    console.warn("Using fallback geometry for stair base:", error)
+      console.log(`✅ Loaded model: ${config.name}`)
+    } else {
+      console.error(`❌ Failed to load model: ${selectedModelId}`)
+    }
+  }, [selectedModelId, isInitialized])
+
+  useEffect(() => {
+    if (!selectedModelId || !isInitialized || Object.keys(componentSettings).length === 0) return
+
+    const configToSave: StairConfiguration = {
+      modelId: selectedModelId,
+      globalScale,
+      globalArrayMultiplier,
+      componentSettings,
+      componentTextures,
+    }
+
+    saveStairConfiguration(configToSave)
+  }, [selectedModelId, globalScale, globalArrayMultiplier, componentSettings, componentTextures, isInitialized])
+
+  const calculatePrice = () => {
+    if (!modelConfig) return 0
+    const effectiveStepCount = getEffectiveCount("step", componentSettings, globalArrayMultiplier)
+    return modelConfig.pricing.basePrice + modelConfig.pricing.pricePerStep * effectiveStepCount
+  }
+
+  if (!isInitialized) {
     return (
-      <mesh position={[0, -0.1, 0]}>
-        <boxGeometry args={[1.2, 0.2, 0.3]} />
-        <meshStandardMaterial color="#8B4513" />
-      </mesh>
-    )
-  }
-}
-
-function StairStep({ position }: { position: [number, number, number] }) {
-  const { scene } = useGLTF("/models/limon_central/limon_central_droit_droit_step.glb")
-  try {
-    return <primitive object={scene.clone()} position={position} />
-  } catch (error) {
-    console.warn("Using fallback geometry for stair step:", error)
-    return (
-      <mesh position={position}>
-        <boxGeometry args={[1.2, 0.05, 0.3]} />
-        <meshStandardMaterial color="#D2B48C" />
-      </mesh>
-    )
-  }
-}
-
-function StairStep1({ position }: { position: [number, number, number] }) {
-  const { scene } = useGLTF("/models/limon_central/limon_central_droit_droit_step1.glb")
-  try {
-    return <primitive object={scene.clone()} position={position} />
-  } catch (error) {
-    console.warn("Using fallback geometry for stair step1:", error)
-    return (
-      <mesh position={position}>
-        <boxGeometry args={[1.2, 0.05, 0.3]} />
-        <meshStandardMaterial color="#D2B48C" />
-      </mesh>
-    )
-  }
-}
-
-function StairTop({ position }: { position: [number, number, number] }) {
-  const { scene } = useGLTF("/models/limon_central/limon_central_droit_droit_top.glb")
-  try {
-    return <primitive object={scene.clone()} position={position} />
-  } catch (error) {
-    console.warn("Using fallback geometry for stair top:", error)
-    return (
-      <mesh position={position}>
-        <boxGeometry args={[1.2, 0.1, 0.3]} />
-        <meshStandardMaterial color="#8B4513" />
-      </mesh>
-    )
-  }
-}
-
-// Temporary modular stair system using basic geometry
-function ModularStair({
-  steps,
-  stepHeight = 0.2,
-  stepDepth = 0.3,
-}: { steps: number; stepHeight?: number; stepDepth?: number }) {
-  return (
-    <group>
-      {/* Base - using basic geometry */}
-      <mesh position={[0, -0.1, 0]}>
-        <boxGeometry args={[1.2, 0.2, 0.4]} />
-        <meshStandardMaterial color="#8B4513" />
-      </mesh>
-
-      {/* Array of steps - using basic geometry */}
-      {Array.from({ length: steps }).map((_, i) => {
-        const yPos = i * stepHeight
-        const zPos = i * stepDepth
-
-        return (
-          <group key={`step-${i}`}>
-            {/* Step tread */}
-            <mesh position={[0, yPos, zPos]}>
-              <boxGeometry args={[1.2, 0.05, stepDepth]} />
-              <meshStandardMaterial color="#D2B48C" />
-            </mesh>
-
-            {/* Step riser */}
-            <mesh position={[0, yPos - stepHeight / 2, zPos + stepDepth / 2]}>
-              <boxGeometry args={[1.2, stepHeight, 0.05]} />
-              <meshStandardMaterial color="#C19A6B" />
-            </mesh>
-
-            {/* Central support beam */}
-            <mesh position={[0, yPos - 0.08, zPos]}>
-              <boxGeometry args={[0.1, 0.15, 0.2]} />
-              <meshStandardMaterial color="#2F2F2F" />
-            </mesh>
-          </group>
-        )
-      })}
-
-      {/* Top piece */}
-      <mesh position={[0, steps * stepHeight + 0.05, steps * stepDepth]}>
-        <boxGeometry args={[1.2, 0.1, 0.3]} />
-        <meshStandardMaterial color="#8B4513" />
-      </mesh>
-    </group>
-  )
-}
-
-// Main stair component with all types
-function Stair({
-  type,
-  material,
-  steps,
-  width,
-  componentTextures,
-}: {
-  type: string
-  material: string
-  steps: number
-  width: number
-  componentTextures?: { [key: string]: string }
-}) {
-  const stepHeight = 0.2
-  const stepDepth = 0.3
-  const totalHeight = steps * stepHeight
-
-  // Material colors for fallback basic geometry
-  const materialColors = {
-    oak: "#D2B48C",
-    walnut: "#8B4513",
-    maple: "#F5DEB3",
-    ebony: "#2F2F2F",
-  }
-
-  const woodColor = materialColors[material as keyof typeof materialColors] || "#D2B48C"
-
-  // Default component textures configuration
-  const defaultComponentTextures = {
-    base: "painted-metal",
-    step: "painted-metal",
-    step1: "dark-cherry-wood",
-    top: "painted-metal",
-  }
-
-  const textures = componentTextures || defaultComponentTextures
-
-  // Use modular GLTF system for limon-central type
-  if (type === "limon-central") {
-    return (
-      <group position={[0, -totalHeight / 2, 0]} scale={[1, 1, 1]}>
-        <ModularStair steps={steps} stepHeight={stepHeight} stepDepth={stepDepth} />
-      </group>
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-gray-500">Initializing...</p>
+      </div>
     )
   }
 
-  if (type === "limon-central-droit") {
-    const stepSpacing = [-10.133, 6.941, 0.0] as [number, number, number]
-    const step1Spacing = [-10.133, 6.941, 0.3] as [number, number, number]
-    const modelScale = 0.01 // Scale down the model to 1:100
-
+  if (!modelConfig || Object.keys(componentSettings).length === 0) {
     return (
-      <group position={[0, -totalHeight / 2, 0]} scale={[modelScale, modelScale, modelScale]}>
-        <LimonCentralBase textureId={textures.base} position={[0, 0, 0]} />
-
-        {Array.from({ length: steps }).map((_, i) => (
-          <LimonCentralStep
-            key={`step-${i}`}
-            textureId={textures.step}
-            position={[stepSpacing[0] * i, stepSpacing[1] * i, stepSpacing[2] * i]}
-          />
-        ))}
-
-        {Array.from({ length: steps + 1 }).map((_, i) => (
-          <LimonCentralStep1
-            key={`step1-${i}`}
-            textureId={textures.step1}
-            position={[step1Spacing[0] * i, step1Spacing[1] * i, step1Spacing[2] * i]}
-          />
-        ))}
-
-        <LimonCentralTop
-          textureId={textures.top}
-          position={[stepSpacing[0] * (steps - 1), stepSpacing[1] * (steps - 1), stepSpacing[2] * (steps - 1)]}
-        />
-      </group>
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p className="text-gray-500 mb-2">Loading model configuration...</p>
+          <p className="text-sm text-gray-400">Model ID: {selectedModelId || "none"}</p>
+        </div>
+      </div>
     )
   }
 
-  // Keep existing basic geometry for other stair types
-  return (
-    <group position={[0, -totalHeight / 2, 0]}>
-      {/* Central spine(s) for floating stairs */}
-      {(type === "floating" || type === "double-floating") && (
-        <>
-          {type === "double-floating" ? (
-            // Double parallel spines
-            <>
-              <mesh
-                position={[-0.3, totalHeight / 2.4, 0]}
-                rotation={[Math.atan2(totalHeight, steps * stepDepth) + (22.5 * Math.PI) / 180, 0, 0]}
-              >
-                <boxGeometry
-                  args={[0.15, Math.sqrt(totalHeight * totalHeight + steps * stepDepth * (steps * stepDepth)), 0.15]}
-                />
-                <meshStandardMaterial color="#2F2F2F" />
-              </mesh>
-              <mesh
-                position={[0.3, totalHeight / 2.4, 0]}
-                rotation={[Math.atan2(totalHeight, steps * stepDepth) + (22.5 * Math.PI) / 180, 0, 0]}
-              >
-                <boxGeometry
-                  args={[0.15, Math.sqrt(totalHeight * totalHeight + steps * stepDepth * (steps * stepDepth)), 0.15]}
-                />
-                <meshStandardMaterial color="#2F2F2F" />
-              </mesh>
-            </>
-          ) : (
-            // Single central spine
-            <mesh
-              position={[0, totalHeight / 2.4, 0]}
-              rotation={[Math.atan2(totalHeight, steps * stepDepth) + (22.5 * Math.PI) / 180, 0, 0]}
-            >
-              <boxGeometry
-                args={[0.2, Math.sqrt(totalHeight * totalHeight + steps * stepDepth * (steps * stepDepth)), 0.2]}
-              />
-              <meshStandardMaterial color="#2F2F2F" />
-            </mesh>
-          )}
-        </>
-      )}
-
-      {/* Generate basic geometry steps for non-GLTF types */}
-      {Array.from({ length: steps }).map((_, i) => (
-        <group key={i}>
-          <mesh position={[0, i * stepHeight, i * stepDepth - (steps * stepDepth) / 2]}>
-            <boxGeometry args={[width, 0.05, stepDepth]} />
-            <meshStandardMaterial color={woodColor} />
-          </mesh>
-
-          {type === "traditional" && (
-            <mesh
-              position={[0, i * stepHeight - stepHeight / 2, i * stepDepth - (steps * stepDepth) / 2 + stepDepth / 2]}
-            >
-              <boxGeometry args={[width, stepHeight, 0.05]} />
-              <meshStandardMaterial color={woodColor} />
-            </mesh>
-          )}
-
-          {(type === "floating" || type === "double-floating") && (
-            <>
-              {type === "double-floating" ? (
-                <>
-                  <mesh position={[-0.3, i * stepHeight - 0.08, i * stepDepth - (steps * stepDepth) / 2]}>
-                    <boxGeometry args={[0.08, 0.15, 0.15]} />
-                    <meshStandardMaterial color="#2F2F2F" />
-                  </mesh>
-                  <mesh position={[0.3, i * stepHeight - 0.08, i * stepDepth - (steps * stepDepth) / 2]}>
-                    <boxGeometry args={[0.08, 0.15, 0.15]} />
-                    <meshStandardMaterial color="#2F2F2F" />
-                  </mesh>
-                </>
-              ) : (
-                <mesh position={[0, i * stepHeight - 0.08, i * stepDepth - (steps * stepDepth) / 2]}>
-                  <boxGeometry args={[0.1, 0.2, 0.2]} />
-                  <meshStandardMaterial color="#2F2F2F" />
-                </mesh>
-              )}
-            </>
-          )}
-        </group>
-      ))}
-
-      {type === "traditional" && (
-        <>
-          <mesh position={[width / 2 + 0.05, totalHeight / 2, (steps * stepDepth) / 4]}>
-            <boxGeometry args={[0.05, totalHeight + 0.2, 0.05]} />
-            <meshStandardMaterial color={woodColor} />
-          </mesh>
-          <mesh
-            position={[width / 2 + 0.05, totalHeight / 2 + 0.1, (steps * stepDepth) / 4]}
-            rotation={[Math.atan2(totalHeight, steps * stepDepth), 0, 0]}
-          >
-            <boxGeometry
-              args={[0.05, 0.05, Math.sqrt(totalHeight * totalHeight + steps * stepDepth * (steps * stepDepth))]}
-            />
-            <meshStandardMaterial color={woodColor} />
-          </mesh>
-        </>
-      )}
-    </group>
-  )
-}
-
-export default function StairBuilder() {
-  const [stairType, setStairType] = useState("floating")
-  const [material, setMaterial] = useState("oak")
-  const [steps, setSteps] = useState([14])
-  const [width, setWidth] = useState([1.2])
-  const [componentTextures, setComponentTextures] = useState({
-    base: "painted-metal",
-    step: "painted-metal",
-    step1: "dark-cherry-wood",
-    top: "painted-metal",
-  })
-
-  const stairTypes = [
-    { id: "limon-central-droit", name: "Limon Central - Droit/Straight", price: 6800 },
-    { id: "floating", name: "Floating Stairs", price: 4500 },
-    { id: "traditional", name: "Traditional Stairs", price: 2800 },
-    { id: "spiral", name: "Spiral Stairs", price: 6200 },
-    { id: "l-shaped", name: "L-Shaped Stairs", price: 3400 },
-    { id: "double-floating", name: "Double Floating Stairs", price: 5200 },
-  ]
-
-  const materials = [
-    { id: "oak", name: "White Oak", price: 0 },
-    { id: "walnut", name: "Black Walnut", price: 800 },
-    { id: "maple", name: "Hard Maple", price: 400 },
-    { id: "ebony", name: "Ebony", price: 1200 },
-  ]
-
-  const currentStairType = stairTypes.find((t) => t.id === stairType)
-  const currentMaterial = materials.find((m) => m.id === material)
-  const basePrice = (currentStairType?.price || 0) + (currentMaterial?.price || 0)
-  const totalPrice = basePrice + (steps[0] - 12) * 150 + (width[0] - 1) * 200
+  const effectiveStepCount = getEffectiveCount("step", componentSettings, globalArrayMultiplier)
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 to-stone-100">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-stone-800 rounded-lg"></div>
-              <span className="text-xl font-semibold text-stone-800">Escaliers en Metal</span>
+      <header className="border-b bg-white/80 backdrop-blur-sm">
+        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
+              <Ruler className="w-6 h-6 text-white" />
             </div>
-            <nav className="hidden md:flex items-center space-x-8">
-              <a href="#" className="text-stone-600 hover:text-stone-800 transition-colors">
-                Gallery
-              </a>
-              <a href="#" className="text-stone-600 hover:text-stone-800 transition-colors">
-                About
-              </a>
-              <a href="#" className="text-stone-600 hover:text-stone-800 transition-colors">
-                Contact
-              </a>
-              <Button variant="outline" size="sm">
-                <Share2 className="w-4 h-4 mr-2" />
-                Share Design
-              </Button>
-            </nav>
+            <div>
+              <h1 className="text-xl font-bold text-slate-900">Scandinavian Stair Builder</h1>
+              <p className="text-sm text-slate-600">Professional staircase configurator</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/model-manager">
+                <Upload className="w-4 h-4 mr-2" />
+                Model Manager
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/texture-manager">
+                <Palette className="w-4 h-4 mr-2" />
+                Texture Manager
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/gltf-test">
+                <Wrench className="w-4 h-4 mr-2" />
+                GLTF Test
+              </Link>
+            </Button>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-6 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* 3D Viewer */}
-          <div className="lg:col-span-2">
-            <Card className="h-[600px] overflow-hidden border-0 shadow-lg">
-              <div className="h-full bg-gradient-to-b from-stone-100 to-stone-200">
-                <Canvas camera={{ position: [4, 3, 4], fov: 50 }}>
-                  <Suspense fallback={null}>
-                    <ambientLight intensity={0.6} />
-                    <directionalLight position={[10, 10, 5]} intensity={1.2} />
-                    <pointLight position={[-10, -10, -10]} intensity={0.3} />
-                    <Stair
-                      type={stairType}
-                      material={material}
-                      steps={steps[0]}
-                      width={width[0]}
-                      componentTextures={componentTextures}
-                    />
-                    <ContactShadows position={[0, -3, 0]} opacity={0.4} scale={15} blur={2} />
-                    <Environment preset="studio" />
-                    <OrbitControls
-                      enablePan={false}
-                      minDistance={3}
-                      maxDistance={12}
-                      minPolarAngle={0}
-                      maxPolarAngle={Math.PI / 2}
-                    />
-                  </Suspense>
-                </Canvas>
-              </div>
-            </Card>
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* 3D Viewer */}
+        <div className="flex-1 p-6">
+          <div className="h-full bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl shadow-xl overflow-hidden border border-slate-300">
+            <Canvas shadows dpr={[1, 2]}>
+              <Suspense fallback={null}>
+                <PerspectiveCamera makeDefault position={[50, 30, 50]} fov={50} />
+                <OrbitControls enableDamping dampingFactor={0.05} minDistance={20} maxDistance={200} />
 
-            {/* Action Buttons */}
-            <div className="flex gap-4 mt-6">
-              <Button size="lg" className="flex-1 bg-stone-800 hover:bg-stone-700">
-                <Download className="w-4 h-4 mr-2" />
-                Download Plans
-              </Button>
-              <Button size="lg" variant="outline" className="flex-1 bg-transparent">
-                Request Quote
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </div>
+                <ambientLight intensity={0.6} />
+                <directionalLight position={[10, 20, 10]} intensity={1.2} castShadow />
+                <hemisphereLight intensity={0.4} groundColor="#b1b1b1" />
+
+                <group scale={globalScale}>
+                  {modelConfig.components.base && componentSettings.base.enabled && (
+                    <>
+                      {Array.from(
+                        { length: getEffectiveCount("base", componentSettings, globalArrayMultiplier) },
+                        (_, i) => (
+                          <StairModule
+                            key={`base-${i}`}
+                            url={modelConfig.components.base.url}
+                            textureId={
+                              componentTextures.base || modelConfig.components.base.defaultTexture || "painted-metal"
+                            }
+                            position={calculatePosition("base", i, componentSettings, globalArrayMultiplier)}
+                          />
+                        ),
+                      )}
+                    </>
+                  )}
+                  {modelConfig.components.base && !componentSettings.base.enabled && (
+                    <StairModule
+                      url={modelConfig.components.base.url}
+                      textureId={
+                        componentTextures.base || modelConfig.components.base.defaultTexture || "painted-metal"
+                      }
+                      position={calculatePosition("base", 0, componentSettings, globalArrayMultiplier)}
+                    />
+                  )}
+
+                  {modelConfig.components.step && (
+                    <>
+                      {Array.from({ length: effectiveStepCount }, (_, i) => (
+                        <StairModule
+                          key={`step-${i}`}
+                          url={modelConfig.components.step.url}
+                          textureId={
+                            componentTextures.step || modelConfig.components.step.defaultTexture || "painted-metal"
+                          }
+                          position={calculatePosition("step", i, componentSettings, globalArrayMultiplier)}
+                        />
+                      ))}
+                    </>
+                  )}
+
+                  {modelConfig.components.step1 && (
+                    <>
+                      {Array.from(
+                        { length: getEffectiveCount("step1", componentSettings, globalArrayMultiplier) },
+                        (_, i) => (
+                          <StairModule
+                            key={`step1-${i}`}
+                            url={modelConfig.components.step1.url}
+                            textureId={
+                              componentTextures.step1 ||
+                              modelConfig.components.step1.defaultTexture ||
+                              "dark-cherry-wood"
+                            }
+                            position={calculatePosition("step1", i, componentSettings, globalArrayMultiplier)}
+                          />
+                        ),
+                      )}
+                    </>
+                  )}
+
+                  {modelConfig.components.top && componentSettings.top.enabled && (
+                    <>
+                      {Array.from(
+                        { length: getEffectiveCount("top", componentSettings, globalArrayMultiplier) },
+                        (_, i) => (
+                          <StairModule
+                            key={`top-${i}`}
+                            url={modelConfig.components.top.url}
+                            textureId={
+                              componentTextures.top || modelConfig.components.top.defaultTexture || "painted-metal"
+                            }
+                            position={calculatePosition("top", i, componentSettings, globalArrayMultiplier)}
+                          />
+                        ),
+                      )}
+                    </>
+                  )}
+                  {modelConfig.components.top && !componentSettings.top.enabled && (
+                    <StairModule
+                      url={modelConfig.components.top.url}
+                      textureId={componentTextures.top || modelConfig.components.top.defaultTexture || "painted-metal"}
+                      position={calculatePosition("top", 0, componentSettings, globalArrayMultiplier)}
+                    />
+                  )}
+                </group>
+
+                <Grid args={[100, 100]} cellSize={1} cellThickness={0.5} fadeDistance={100} />
+                <Environment preset="apartment" />
+              </Suspense>
+            </Canvas>
           </div>
+        </div>
 
-          {/* Configuration Panel */}
-          <div className="space-y-6">
-            {/* Stair Type */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-stone-800">Stair Type</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Select value={stairType} onValueChange={setStairType}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stairTypes.map((type) => (
-                      <SelectItem key={type.id} value={type.id}>
-                        <div className="flex justify-between items-center w-full">
-                          <span>{type.name}</span>
-                          <Badge variant="secondary" className="ml-2">
-                            ${type.price.toLocaleString()}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
+        {/* Configuration Panel */}
+        <div className="w-96 bg-white border-l border-slate-200 overflow-y-auto">
+          <Tabs defaultValue="model" className="h-full flex flex-col">
+            <TabsList className="grid w-full grid-cols-3 sticky top-0 bg-white z-10 border-b">
+              <TabsTrigger value="model">
+                <Settings className="w-4 h-4 mr-2" />
+                Model
+              </TabsTrigger>
+              <TabsTrigger value="dimensions">
+                <Ruler className="w-4 h-4 mr-2" />
+                Size
+              </TabsTrigger>
+              <TabsTrigger value="materials">
+                <Palette className="w-4 h-4 mr-2" />
+                Materials
+              </TabsTrigger>
+            </TabsList>
 
-            {/* Material */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-stone-800">Wood Material</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Select value={material} onValueChange={setMaterial}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {materials.map((mat) => (
-                      <SelectItem key={mat.id} value={mat.id}>
-                        <div className="flex justify-between items-center w-full">
-                          <span>{mat.name}</span>
-                          {mat.price > 0 && (
-                            <Badge variant="secondary" className="ml-2">
-                              +${mat.price}
-                            </Badge>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
-
-            {/* Texture Controls - only show for Limon Central */}
-            {stairType === "limon-central-droit" && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-stone-800">Component Textures</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {Object.entries(componentTextures).map(([component, textureId]) => (
-                    <div key={component} className="space-y-2">
-                      <Label className="text-sm font-medium text-stone-600 capitalize">{component}</Label>
+            <div className="flex-1 overflow-y-auto p-6">
+              <TabsContent value="model" className="space-y-4 mt-0">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Stair Model</CardTitle>
+                    <CardDescription>Choose your staircase configuration</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Category</Label>
                       <Select
-                        value={textureId}
-                        onValueChange={(value) => setComponentTextures((prev) => ({ ...prev, [component]: value }))}
+                        value={modelConfig.category}
+                        onValueChange={(categoryId) => {
+                          const modelsInCategory = allModels.filter((m) => m.category === categoryId)
+                          if (modelsInCategory.length > 0) {
+                            setSelectedModelId(modelsInCategory[0].id)
+                          }
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <div className="px-2 py-1 text-xs text-stone-500 font-medium">Wood Textures</div>
-                          {getWoodTextures().map((texture) => (
-                            <SelectItem key={texture.id} value={texture.id}>
-                              <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-amber-600"></div>
-                                {texture.name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                          <div className="px-2 py-1 text-xs text-stone-500 font-medium border-t border-stone-200 mt-1">
-                            Metal Textures
-                          </div>
-                          {getMetalTextures().map((texture) => (
-                            <SelectItem key={texture.id} value={texture.id}>
-                              <div className="flex items-center gap-2">
-                                <div className="w-3 h-3 rounded bg-gray-400"></div>
-                                {texture.name}
-                              </div>
+                          {categories.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
 
-            {/* Dimensions */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-stone-800">Dimensions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <label className="text-sm font-medium text-stone-600">Number of Steps</label>
-                    <span className="text-sm text-stone-800">{steps[0]}</span>
-                  </div>
-                  <Slider value={steps} onValueChange={setSteps} min={8} max={20} step={1} className="w-full" />
-                </div>
+                    <div className="space-y-2">
+                      <Label>Model</Label>
+                      <Select value={selectedModelId || ""} onValueChange={setSelectedModelId}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allModels
+                            .filter((m) => m.category === modelConfig.category)
+                            .map((model) => (
+                              <SelectItem key={model.id} value={model.id}>
+                                <div className="flex items-center gap-2">
+                                  <span>{model.name}</span>
+                                  {model.metadata.isCustom && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      Custom
+                                    </Badge>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <label className="text-sm font-medium text-stone-600">Width (meters)</label>
-                    <span className="text-sm text-stone-800">{width[0].toFixed(1)}m</span>
-                  </div>
-                  <Slider value={width} onValueChange={setWidth} min={0.8} max={2.0} step={0.1} className="w-full" />
-                </div>
-              </CardContent>
-            </Card>
+                    <div className="p-4 bg-slate-50 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <Info className="w-4 h-4 text-slate-600 mt-0.5" />
+                        <p className="text-sm text-slate-600">{modelConfig.description}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Model Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Components:</span>
+                      <span className="font-medium">{Object.keys(modelConfig.components).length}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Version:</span>
+                      <span className="font-medium">{modelConfig.metadata.version}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Type:</span>
+                      <Badge variant={modelConfig.metadata.isCustom ? "secondary" : "default"}>
+                        {modelConfig.metadata.isCustom ? "Custom" : "Built-in"}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="dimensions" className="space-y-4 mt-0">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Dimensions</CardTitle>
+                    <CardDescription>Adjust staircase size and scale</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Number of Steps</Label>
+                        <span className="text-sm font-medium text-slate-700">{effectiveStepCount}</span>
+                      </div>
+                      <Slider
+                        value={[globalArrayMultiplier * 100]}
+                        onValueChange={(v) => setGlobalArrayMultiplier(v[0] / 100)}
+                        min={10}
+                        max={300}
+                        step={5}
+                      />
+                      <p className="text-xs text-slate-500">
+                        Base count: {componentSettings.step?.count || 8} × {globalArrayMultiplier.toFixed(2)} ={" "}
+                        {effectiveStepCount} steps
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Total height: {(effectiveStepCount * 6.941 * globalScale * 100).toFixed(1)} cm
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Scale</Label>
+                        <span className="text-sm font-medium text-slate-700">{(globalScale * 100).toFixed(1)}%</span>
+                      </div>
+                      <Slider
+                        value={[globalScale * 1000]}
+                        onValueChange={(v) => setGlobalScale(v[0] / 1000)}
+                        min={5}
+                        max={20}
+                        step={0.5}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Measurements</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Step width:</span>
+                      <span className="font-medium">{(10.133 * globalScale * 100).toFixed(1)} cm</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Step height:</span>
+                      <span className="font-medium">{(6.941 * globalScale * 100).toFixed(1)} cm</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Total length:</span>
+                      <span className="font-medium">
+                        {(effectiveStepCount * 10.133 * globalScale * 100).toFixed(1)} cm
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="materials" className="space-y-4 mt-0">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Materials & Finishes</CardTitle>
+                    <CardDescription>Customize component textures</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {Object.entries(modelConfig.components).map(([componentId, component]) => {
+                      if (!component) return null
+                      return (
+                        <div key={componentId} className="space-y-2">
+                          <Label className="capitalize">{component.name}</Label>
+                          <Select
+                            value={componentTextures[componentId] || component.defaultTexture}
+                            onValueChange={(value) =>
+                              setComponentTextures((prev) => ({
+                                ...prev,
+                                [componentId]: value,
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableTextures.map((texture) => (
+                                <SelectItem key={texture.id} value={texture.id}>
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-4 h-4 rounded border"
+                                      style={{
+                                        background: texture.category === "wood" ? "#8B4513" : "#708090",
+                                      }}
+                                    />
+                                    <span>{texture.name}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )
+                    })}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </div>
 
             {/* Price Summary */}
-            <Card className="border-stone-200 bg-stone-50">
-              <CardHeader>
-                <CardTitle className="text-stone-800">Price Estimate</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-stone-600">Base Price ({currentStairType?.name})</span>
-                  <span className="text-stone-800">${currentStairType?.price.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-stone-600">Material ({currentMaterial?.name})</span>
-                  <span className="text-stone-800">
-                    {currentMaterial?.price ? `+$${currentMaterial.price}` : "Included"}
+            <div className="border-t bg-slate-50 p-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-600">Base price:</span>
+                  <span className="text-sm">
+                    {modelConfig.pricing.basePrice} {modelConfig.pricing.currency}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-stone-600">Custom Sizing</span>
-                  <span className="text-stone-800">
-                    +${((steps[0] - 12) * 150 + (width[0] - 1) * 200).toLocaleString()}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-600">Steps ({effectiveStepCount}):</span>
+                  <span className="text-sm">
+                    {modelConfig.pricing.pricePerStep * effectiveStepCount} {modelConfig.pricing.currency}
                   </span>
                 </div>
-                <Separator />
-                <div className="flex justify-between font-semibold text-lg">
-                  <span className="text-stone-800">Total</span>
-                  <span className="text-stone-800">${totalPrice.toLocaleString()}</span>
+                <div className="pt-4 border-t">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-lg font-semibold">Total:</span>
+                    <span className="text-2xl font-bold text-blue-600">
+                      {calculatePrice()} {modelConfig.pricing.currency}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm">
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      <Share2 className="w-4 h-4 mr-2" />
+                      Share
+                    </Button>
+                  </div>
+                  <Button className="w-full mt-2" size="lg">
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                    Request Quote
+                  </Button>
                 </div>
-                <p className="text-xs text-stone-500 mt-2">
-                  *Price includes materials and basic installation. Final quote may vary based on site conditions.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+            </div>
+          </Tabs>
         </div>
       </div>
     </div>

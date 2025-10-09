@@ -1,774 +1,580 @@
 "use client"
 
 import { Canvas } from "@react-three/fiber"
-import { OrbitControls, Environment, ContactShadows, useGLTF, useTexture, Html } from "@react-three/drei"
-import { Suspense, useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
+import { OrbitControls, Environment, PerspectiveCamera, Grid } from "@react-three/drei"
+import { StairModule } from "@/components/StairModule"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
+import { Slider } from "@/components/ui/slider"
+import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import * as THREE from "three"
-import { TEXTURE_LIBRARY, getTextureById, getTextureMaps, getWoodTextures, getMetalTextures } from "@/lib/textures"
+import { Input } from "@/components/ui/input"
+import { useEffect, useState, Suspense } from "react"
+import { getTextures } from "@/lib/textures"
+import {
+  getModels,
+  type ModelConfiguration,
+  type ComponentArraySettings,
+  type StairConfiguration,
+  loadModelConfiguration,
+  calculatePosition,
+  calculateAutoPosition,
+  getEffectiveCount,
+  createDefaultComponentSettings,
+  saveStairConfiguration,
+  loadStairConfiguration,
+  clearStairConfiguration,
+} from "@/lib/models"
+import { Save, RotateCcw, Home, Trash2 } from "lucide-react"
+import Link from "next/link"
+import { toast } from "sonner"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-// Loading fallback component
-function LoadingFallback() {
-  return (
-    <Html center>
-      <div className="text-white bg-black bg-opacity-50 px-4 py-2 rounded">Loading 3D Model...</div>
-    </Html>
-  )
-}
-
-// Generic StairModule component with better error handling
-function StairModule({
-  url,
-  textureId,
-  position = [0, 0, 0],
-  ...rest
-}: {
-  url: string
-  textureId: string
-  position?: [number, number, number]
-  [key: string]: any
-}) {
-  const { scene } = useGLTF(url)
-  const textureSet = getTextureById(textureId)
-  const textureMaps = useTexture(getTextureMaps(textureSet))
-
-  const [appliedTextures, setAppliedTextures] = useState(false)
-
-  useEffect(() => {
-    if (scene && textureMaps && textureSet && !appliedTextures) {
-      scene.traverse((obj) => {
-        if (obj.isMesh && obj.material) {
-          if (obj.material.isMeshStandardMaterial || obj.material.type === "MeshStandardMaterial") {
-            Object.assign(obj.material, textureMaps)
-            Object.assign(obj.material, textureSet.materialProps)
-            obj.material.needsUpdate = true
-          } else {
-            const newMaterial = new THREE.MeshStandardMaterial()
-            Object.assign(newMaterial, textureMaps)
-            Object.assign(newMaterial, textureSet.materialProps)
-            obj.material = newMaterial
-          }
-        }
-      })
-      setAppliedTextures(true)
-    }
-  }, [scene, textureMaps, textureSet, appliedTextures])
-
-  if (!textureSet) {
-    console.warn(`Texture set not found: ${textureId}`)
-    return <primitive object={scene.clone()} position={position} {...rest} />
-  }
-
-  return <primitive object={scene.clone()} position={position} {...rest} />
-}
-
-// Individual GLTF components using the new texture system
-function TestStairBase({
-  position = [0, 0, 0],
-  textureId = "dark-cherry-wood",
-}: {
-  position?: [number, number, number]
-  textureId?: string
-}) {
-  return (
-    <StairModule
-      url="/models/limon_central/limon_central_droit_droit_base.glb"
-      textureId={textureId}
-      position={position}
-    />
-  )
-}
-
-function TestStairStep({
-  position = [0, 0, 0],
-  textureId = "dark-cherry-wood",
-}: {
-  position?: [number, number, number]
-  textureId?: string
-}) {
-  return (
-    <StairModule
-      url="/models/limon_central/limon_central_droit_droit_step.glb"
-      textureId={textureId}
-      position={position}
-    />
-  )
-}
-
-function TestStairStep1({
-  position = [0, 0, 0],
-  textureId = "painted-metal",
-}: {
-  position?: [number, number, number]
-  textureId?: string
-}) {
-  return (
-    <StairModule
-      url="/models/limon_central/limon_central_droit_droit_step1.glb"
-      textureId={textureId}
-      position={position}
-    />
-  )
-}
-
-function TestStairTop({
-  position = [0, 0, 0],
-  textureId = "dark-cherry-wood",
-}: {
-  position?: [number, number, number]
-  textureId?: string
-}) {
-  return (
-    <StairModule
-      url="/models/limon_central/limon_central_droit_droit_top.glb"
-      textureId={textureId}
-      position={position}
-    />
-  )
-}
-
-// Texture test component - fixed to avoid conditional useTexture calls
-function TextureTest() {
-  // Load all textures at once to avoid conditional hooks
-  const allTextures = useTexture({
-    // Wood textures
-    darkCherryDiffuse: "/textures/wood/dark-cherrywood-diffuse.jpg",
-    darkCherryNormal: "/textures/wood/dark-cherrywood-normal.jpg",
-    darkCherryAO: "/textures/wood/dark-cherrywood-ao.jpg",
-    // Metal textures
-    metalDiffuse: "/textures/metal/painted_metal_diffuse.jpg",
-    metalNormal: "/textures/metal/painted_metal_normal_opengl.jpg",
-    metalSpecular: "/textures/metal/painted_metal_specular.jpg",
-  })
-
-  const woodTextures = getWoodTextures()
-  const metalTextures = getMetalTextures()
-
-  return (
-    <group>
-      {/* Wood material samples */}
-      {woodTextures.map((texture, index) => (
-        <group key={texture.id}>
-          <mesh position={[-3 + index * 2, 1, 0]}>
-            <boxGeometry args={[1, 1, 0.1]} />
-            <meshStandardMaterial
-              map={allTextures.darkCherryDiffuse}
-              normalMap={allTextures.darkCherryNormal}
-              aoMap={allTextures.darkCherryAO}
-              {...texture.materialProps}
-            />
-          </mesh>
-          <Html position={[-3 + index * 2, 0.3, 0]} center>
-            <div className="text-white bg-black bg-opacity-50 px-2 py-1 rounded text-xs">{texture.name}</div>
-          </Html>
-        </group>
-      ))}
-
-      {/* Metal material samples */}
-      {metalTextures.map((texture, index) => (
-        <group key={texture.id}>
-          <mesh position={[-3 + index * 2, -1, 0]}>
-            <boxGeometry args={[1, 1, 0.1]} />
-            <meshStandardMaterial
-              map={allTextures.metalDiffuse}
-              normalMap={allTextures.metalNormal}
-              metalnessMap={allTextures.metalSpecular}
-              {...texture.materialProps}
-            />
-          </mesh>
-          <Html position={[-3 + index * 2, -1.7, 0]} center>
-            <div className="text-white bg-black bg-opacity-50 px-2 py-1 rounded text-xs">{texture.name}</div>
-          </Html>
-        </group>
-      ))}
-    </group>
-  )
-}
-
-// Complete stair assembly with texture support
-function CompleteStair({
-  positions,
-  arraySize,
-  stepSpacing,
-  step1Spacing,
-  componentTextures,
-  scale = 1,
-}: {
-  positions: { [key: string]: [number, number, number] }
-  arraySize: number
-  stepSpacing: [number, number, number]
-  step1Spacing: [number, number, number]
-  componentTextures: { [key: string]: string }
-  scale?: number
-}) {
-  return (
-    <group scale={[scale, scale, scale]}>
-      {/* Base - single instance with texture */}
-      <TestStairBase position={positions.base} textureId={componentTextures.base} />
-
-      {/* Step array with texture */}
-      {Array.from({ length: arraySize }).map((_, i) => (
-        <TestStairStep
-          key={`step-${i}`}
-          position={[
-            positions.step[0] + stepSpacing[0] * i,
-            positions.step[1] + stepSpacing[1] * i,
-            positions.step[2] + stepSpacing[2] * i,
-          ]}
-          textureId={componentTextures.step}
-        />
-      ))}
-
-      {/* Step1 array with texture */}
-      {Array.from({ length: arraySize + 1 }).map((_, i) => (
-        <TestStairStep1
-          key={`step1-${i}`}
-          position={[
-            positions.step1[0] + step1Spacing[0] * i,
-            positions.step1[1] + step1Spacing[1] * i,
-            positions.step1[2] + step1Spacing[2] * i,
-          ]}
-          textureId={componentTextures.step1}
-        />
-      ))}
-
-      {/* Top with texture */}
-      <TestStairTop
-        position={[
-          positions.top[0] + stepSpacing[0] * (arraySize - 1),
-          positions.top[1] + stepSpacing[1] * (arraySize - 1),
-          positions.top[2] + stepSpacing[2] * (arraySize - 1),
-        ]}
-        textureId={componentTextures.top}
-      />
-    </group>
-  )
-}
+const DEFAULT_GLOBAL_SCALE = 0.01
 
 export default function GLTFTestPage() {
-  const [selectedModel, setSelectedModel] = useState<string>("complete")
-  const [showTextures, setShowTextures] = useState(false)
+  const [models, setModels] = useState<ModelConfiguration[]>([])
+  const [selectedModelId, setSelectedModelId] = useState<string>("")
+  const [modelConfig, setModelConfig] = useState<ModelConfiguration | null>(null)
+  const [globalScale, setGlobalScale] = useState(DEFAULT_GLOBAL_SCALE)
+  const [globalArrayMultiplier, setGlobalArrayMultiplier] = useState(1.0)
 
-  // Array settings with optimal values
-  const [arraySize, setArraySize] = useState([8])
-  const [stepSpacing, setStepSpacing] = useState([-10.133, 6.941, 0.0] as [number, number, number])
-  const [step1Spacing, setStep1Spacing] = useState([-10.133, 6.941, 0.3] as [number, number, number])
+  const [componentSettings, setComponentSettings] = useState<Record<string, ComponentArraySettings>>({})
 
-  const [globalScale, setGlobalScale] = useState([0.01])
-
-  // Texture selection state using new texture IDs
-  const [componentTextures, setComponentTextures] = useState({
-    base: "dark-cherry-wood",
-    step: "dark-cherry-wood",
-    step1: "painted-metal",
-    top: "dark-cherry-wood",
+  const [componentTextures, setComponentTextures] = useState<Record<string, string>>({
+    base: "painted-metal",
+    step: "painted-metal",
+    step1: "dark-cherry-wood",
+    top: "painted-metal",
   })
 
-  // Position states for each component
-  const [positions, setPositions] = useState({
-    base: [0, 0, 0] as [number, number, number],
-    step1: [0, 0, 0] as [number, number, number],
-    step: [0, 0, 0] as [number, number, number],
-    top: [0, 0, 0] as [number, number, number],
-  })
+  const availableTextures = getTextures()
 
-  const updatePosition = (component: string, axis: "x" | "y" | "z", value: number) => {
-    setPositions((prev) => {
-      const newPos = [...prev[component as keyof typeof prev]] as [number, number, number]
-      const axisIndex = axis === "x" ? 0 : axis === "y" ? 1 : 2
-      newPos[axisIndex] = value
+  useEffect(() => {
+    console.log("🔧 Initializing GLTF test page...")
+    const loadedModels = getModels()
+    setModels(loadedModels)
+
+    const savedConfig = loadStairConfiguration()
+    if (savedConfig) {
+      console.log("📂 Loaded saved unified configuration")
+      setSelectedModelId(savedConfig.modelId)
+      setGlobalScale(savedConfig.globalScale)
+      setGlobalArrayMultiplier(savedConfig.globalArrayMultiplier)
+      setComponentSettings(savedConfig.componentSettings)
+      setComponentTextures(savedConfig.componentTextures)
+    } else if (loadedModels.length > 0 && !selectedModelId) {
+      const defaultModelId = "limon-central-droit-droit"
+      console.log(`📦 Setting default model: ${defaultModelId}`)
+      setSelectedModelId(defaultModelId)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedModelId) {
+      console.log(`🔍 Loading model configuration: ${selectedModelId}`)
+      const loaded = loadModelConfiguration(selectedModelId)
+      if (loaded) {
+        console.log("✅ Model loaded successfully:", loaded.name)
+        setModelConfig(loaded)
+
+        // Only set defaults if we don't have saved settings
+        if (Object.keys(componentSettings).length === 0) {
+          setGlobalScale(loaded.defaultSettings?.globalScale || DEFAULT_GLOBAL_SCALE)
+          setComponentSettings(createDefaultComponentSettings(loaded))
+          setComponentTextures(loaded.componentTextures || componentTextures)
+        }
+
+        console.log("🎨 Applied configuration from GLTF test")
+      } else {
+        console.error("❌ Failed to load model")
+      }
+    }
+  }, [selectedModelId])
+
+  const updateComponentSetting = (componentId: string, field: keyof ComponentArraySettings, value: any) => {
+    setComponentSettings((prev) => ({
+      ...prev,
+      [componentId]: {
+        ...prev[componentId],
+        [field]: value,
+      },
+    }))
+  }
+
+  const updateComponentPosition = (componentId: string, axis: number, value: number) => {
+    setComponentSettings((prev) => {
+      const newPosition: [number, number, number] = [...prev[componentId].basePosition]
+      newPosition[axis] = value
       return {
         ...prev,
-        [component]: newPos,
+        [componentId]: {
+          ...prev[componentId],
+          basePosition: newPosition,
+        },
       }
     })
   }
 
-  const updateSpacing = (type: "step" | "step1", axis: "x" | "y" | "z", value: number) => {
-    const axisIndex = axis === "x" ? 0 : axis === "y" ? 1 : 2
-    if (type === "step") {
-      const newSpacing = [...stepSpacing] as [number, number, number]
-      newSpacing[axisIndex] = value
-      setStepSpacing(newSpacing)
-    } else {
-      const newSpacing = [...step1Spacing] as [number, number, number]
-      newSpacing[axisIndex] = value
-      setStep1Spacing(newSpacing)
-    }
+  const updateComponentSpacing = (componentId: string, axis: number, value: number) => {
+    setComponentSettings((prev) => {
+      const newSpacing: [number, number, number] = [...prev[componentId].spacing]
+      newSpacing[axis] = value
+      return {
+        ...prev,
+        [componentId]: {
+          ...prev[componentId],
+          spacing: newSpacing,
+        },
+      }
+    })
   }
 
-  const updateSpacingFromInput = (type: "step" | "step1", axis: "x" | "y" | "z", value: string) => {
-    const numValue = Number.parseFloat(value)
-    if (!isNaN(numValue)) {
-      updateSpacing(type, axis, numValue)
-    }
-  }
+  const handleSaveConfiguration = () => {
+    if (!modelConfig) return
 
-  const updatePositionFromInput = (component: string, axis: "x" | "y" | "z", value: string) => {
-    const numValue = Number.parseFloat(value)
-    if (!isNaN(numValue)) {
-      updatePosition(component, axis, numValue)
-    }
-  }
-
-  const updateComponentTexture = (component: string, textureId: string) => {
-    setComponentTextures((prev) => ({
-      ...prev,
-      [component]: textureId,
-    }))
-  }
-
-  const renderSelectedModel = () => {
-    const scale = globalScale[0]
-
-    if (showTextures) {
-      return <TextureTest />
-    }
-
-    switch (selectedModel) {
-      case "base":
-        return (
-          <group scale={[scale, scale, scale]}>
-            <TestStairBase position={positions.base} textureId={componentTextures.base} />
-          </group>
-        )
-      case "step":
-        return (
-          <group scale={[scale, scale, scale]}>
-            <TestStairStep position={positions.step} textureId={componentTextures.step} />
-          </group>
-        )
-      case "step1":
-        return (
-          <group scale={[scale, scale, scale]}>
-            <TestStairStep1 position={positions.step1} textureId={componentTextures.step1} />
-          </group>
-        )
-      case "top":
-        return (
-          <group scale={[scale, scale, scale]}>
-            <TestStairTop position={positions.top} textureId={componentTextures.top} />
-          </group>
-        )
-      case "complete":
-        return (
-          <CompleteStair
-            positions={positions}
-            arraySize={arraySize[0]}
-            stepSpacing={stepSpacing}
-            step1Spacing={step1Spacing}
-            componentTextures={componentTextures}
-            scale={scale}
-          />
-        )
-      default:
-        return (
-          <CompleteStair
-            positions={positions}
-            arraySize={arraySize[0]}
-            stepSpacing={stepSpacing}
-            step1Spacing={step1Spacing}
-            componentTextures={componentTextures}
-            scale={scale}
-          />
-        )
-    }
-  }
-
-  const copyDataToClipboard = () => {
-    const data = {
-      positions,
-      arraySize: arraySize[0],
-      stepSpacing,
-      step1Spacing,
+    const config: StairConfiguration = {
+      modelId: selectedModelId,
+      globalScale,
+      globalArrayMultiplier,
+      componentSettings,
       componentTextures,
-      availableTextures: TEXTURE_LIBRARY,
-      globalScale: globalScale[0],
     }
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2))
-    console.log("Configuration copied to clipboard:", data)
+
+    const success = saveStairConfiguration(config)
+
+    if (success) {
+      toast.success("Configuration saved successfully!")
+    } else {
+      toast.error("Failed to save configuration")
+    }
+  }
+
+  const handleClearConfiguration = () => {
+    if (!selectedModelId) return
+
+    const success = clearStairConfiguration()
+    if (success) {
+      toast.success("Configuration cleared!")
+      handleResetToDefaults()
+    } else {
+      toast.error("Failed to clear configuration")
+    }
+  }
+
+  const handleResetToDefaults = () => {
+    if (!modelConfig) return
+
+    setGlobalScale(modelConfig.defaultSettings?.globalScale || DEFAULT_GLOBAL_SCALE)
+    setGlobalArrayMultiplier(1.0)
+    setComponentSettings(createDefaultComponentSettings(modelConfig))
+    setComponentTextures(modelConfig.componentTextures || componentTextures)
+
+    toast.info("Reset to default values")
+  }
+
+  if (!modelConfig?.components?.step) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p className="text-gray-500 mb-2">Loading GLTF test page...</p>
+          <p className="text-sm text-gray-400">Model ID: {selectedModelId || "none"}</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-700">
-      {/* Header */}
-      <header className="border-b border-slate-600 bg-slate-800/80 backdrop-blur-sm">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg"></div>
-              <span className="text-xl font-semibold text-white">GLTF Model Test</span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => (window.location.href = "/")}
-              className="text-white border-white hover:bg-white hover:text-slate-800"
-            >
-              Back to Main
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className="w-full h-screen flex gap-6 p-6">
+      <div className="flex-1 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl overflow-hidden shadow-lg border border-gray-200">
+        <Canvas shadows>
+          <Suspense fallback={null}>
+            <PerspectiveCamera makeDefault position={[50, 30, 50]} fov={50} />
+            <OrbitControls
+              enableDamping
+              dampingFactor={0.05}
+              minDistance={20}
+              maxDistance={200}
+              maxPolarAngle={Math.PI / 2}
+            />
 
-      <div className="container mx-auto px-6 py-8">
-        <div className="grid lg:grid-cols-5 gap-8 h-[calc(100vh-120px)]">
-          {/* Larger 3D Viewer */}
-          <div className="lg:col-span-4 flex flex-col">
-            <Card className="flex-1 overflow-hidden border-slate-600 bg-slate-800">
-              <div className="h-full">
-                <Canvas camera={{ position: [8, 6, 8], fov: 50 }}>
-                  <Suspense fallback={<LoadingFallback />}>
-                    {/* Enhanced lighting for better texture visibility */}
-                    <ambientLight intensity={0.3} />
-                    <directionalLight position={[10, 10, 5]} intensity={1.2} castShadow />
-                    <pointLight position={[-10, -10, -10]} intensity={0.3} />
-                    <spotLight position={[0, 10, 0]} intensity={0.5} angle={0.3} />
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[10, 20, 10]} intensity={1.2} castShadow />
+            <hemisphereLight intensity={0.4} groundColor="#b1b1b1" />
 
-                    {/* Larger grid helper for reference */}
-                    <gridHelper args={[50, 50]} />
+            <group scale={globalScale}>
+              {modelConfig.components.base && componentSettings.base.enabled && (
+                <>
+                  {Array.from(
+                    { length: getEffectiveCount("base", componentSettings, globalArrayMultiplier) },
+                    (_, i) => (
+                      <StairModule
+                        key={`base-${i}`}
+                        url={modelConfig.components.base.url}
+                        textureId={
+                          componentTextures.base || modelConfig.components.base.defaultTexture || "painted-metal"
+                        }
+                        position={calculatePosition("base", i, componentSettings, globalArrayMultiplier)}
+                      />
+                    ),
+                  )}
+                </>
+              )}
+              {modelConfig.components.base && !componentSettings.base.enabled && (
+                <StairModule
+                  url={modelConfig.components.base.url}
+                  textureId={componentTextures.base || modelConfig.components.base.defaultTexture || "painted-metal"}
+                  position={calculatePosition("base", 0, componentSettings, globalArrayMultiplier)}
+                />
+              )}
 
-                    {/* Model */}
-                    {renderSelectedModel()}
+              {modelConfig.components.step && (
+                <>
+                  {Array.from(
+                    { length: getEffectiveCount("step", componentSettings, globalArrayMultiplier) },
+                    (_, i) => (
+                      <StairModule
+                        key={`step-${i}`}
+                        url={modelConfig.components.step.url}
+                        textureId={
+                          componentTextures.step || modelConfig.components.step.defaultTexture || "painted-metal"
+                        }
+                        position={calculatePosition("step", i, componentSettings, globalArrayMultiplier)}
+                      />
+                    ),
+                  )}
+                </>
+              )}
 
-                    {/* Shadows and environment */}
-                    <ContactShadows position={[0, -0.1, 0]} opacity={0.3} scale={25} blur={2} />
-                    <Environment preset="warehouse" />
+              {modelConfig.components.step1 && (
+                <>
+                  {Array.from(
+                    { length: getEffectiveCount("step1", componentSettings, globalArrayMultiplier) },
+                    (_, i) => (
+                      <StairModule
+                        key={`step1-${i}`}
+                        url={modelConfig.components.step1.url}
+                        textureId={
+                          componentTextures.step1 || modelConfig.components.step1.defaultTexture || "dark-cherry-wood"
+                        }
+                        position={calculatePosition("step1", i, componentSettings, globalArrayMultiplier)}
+                      />
+                    ),
+                  )}
+                </>
+              )}
 
-                    {/* Controls with much larger zoom range */}
-                    <OrbitControls
-                      enablePan={true}
-                      minDistance={1}
-                      maxDistance={100}
-                      minPolarAngle={0}
-                      maxPolarAngle={Math.PI / 2}
-                    />
-                  </Suspense>
-                </Canvas>
-              </div>
-            </Card>
+              {modelConfig.components.top && componentSettings.top.enabled && (
+                <>
+                  {Array.from(
+                    { length: getEffectiveCount("top", componentSettings, globalArrayMultiplier) },
+                    (_, i) => (
+                      <StairModule
+                        key={`top-${i}`}
+                        url={modelConfig.components.top.url}
+                        textureId={
+                          componentTextures.top || modelConfig.components.top.defaultTexture || "painted-metal"
+                        }
+                        position={calculatePosition("top", i, componentSettings, globalArrayMultiplier)}
+                      />
+                    ),
+                  )}
+                </>
+              )}
+              {modelConfig.components.top && !componentSettings.top.enabled && (
+                <StairModule
+                  url={modelConfig.components.top.url}
+                  textureId={componentTextures.top || modelConfig.components.top.defaultTexture || "painted-metal"}
+                  position={calculatePosition("top", 0, componentSettings, globalArrayMultiplier)}
+                />
+              )}
+            </group>
 
-            {/* Configuration Data */}
-            <Card className="mt-4 border-slate-600 bg-slate-800">
-              <CardHeader>
-                <CardTitle className="text-white flex justify-between items-center">
-                  Configuration Data
-                  <Button size="sm" onClick={copyDataToClipboard} className="bg-blue-600 hover:bg-blue-700">
-                    Copy Config
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-slate-300">
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <strong>Array Size:</strong> {arraySize[0]} steps
-                  </div>
-                  <div>
-                    <strong>Global Scale:</strong> {globalScale[0].toFixed(3)} ({(1 / globalScale[0]).toFixed(0)}:1)
-                  </div>
-                  <div>
-                    <strong>Step1 Count:</strong> {arraySize[0] + 1} (includes top)
-                  </div>
-                  <div>
-                    <strong>Step Spacing:</strong> [{stepSpacing.map((v) => v.toFixed(3)).join(", ")}]
-                  </div>
-                  <div>
-                    <strong>Step1 Spacing:</strong> [{step1Spacing.map((v) => v.toFixed(3)).join(", ")}]
-                  </div>
-                  <div className="col-span-2">
-                    <strong>Textures:</strong> Base: {getTextureById(componentTextures.base)?.name}, Step:{" "}
-                    {getTextureById(componentTextures.step)?.name}, Step1:{" "}
-                    {getTextureById(componentTextures.step1)?.name}, Top: {getTextureById(componentTextures.top)?.name}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+            <Grid args={[100, 100]} cellSize={1} cellThickness={0.5} fadeDistance={100} />
+            <Environment preset="apartment" />
+          </Suspense>
+        </Canvas>
+      </div>
 
-          {/* Compact Scrollable Controls */}
-          <div className="space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
-            {/* Model Selection */}
-            <Card className="border-slate-600 bg-slate-800">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-sm">Model Selection</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button
-                  variant={showTextures ? "default" : "outline"}
-                  size="sm"
-                  className={`w-full justify-start text-xs ${
-                    showTextures ? "bg-purple-500 text-white" : "text-white border-slate-500 hover:bg-slate-700"
-                  }`}
-                  onClick={() => setShowTextures(!showTextures)}
-                >
-                  Texture Library
-                </Button>
-
-                {[
-                  { id: "base", name: "Base Only", color: "bg-red-500" },
-                  { id: "step", name: "Step Only", color: "bg-orange-500" },
-                  { id: "step1", name: "Step1 Only", color: "bg-yellow-500" },
-                  { id: "top", name: "Top Only", color: "bg-green-500" },
-                  { id: "complete", name: "Complete Array", color: "bg-blue-500" },
-                ].map((model) => (
-                  <Button
-                    key={model.id}
-                    variant={selectedModel === model.id && !showTextures ? "default" : "outline"}
-                    size="sm"
-                    className={`w-full justify-start text-xs ${
-                      selectedModel === model.id && !showTextures
-                        ? `${model.color} text-white`
-                        : "text-white border-slate-500 hover:bg-slate-700"
-                    }`}
-                    onClick={() => {
-                      setSelectedModel(model.id)
-                      setShowTextures(false)
-                    }}
-                  >
-                    <div className={`w-2 h-2 rounded-full ${model.color} mr-2`}></div>
+      <div className="w-96 space-y-4 overflow-y-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Model Selection</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Select value={selectedModelId} onValueChange={setSelectedModelId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a model" />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
                     {model.name}
-                  </Button>
+                  </SelectItem>
                 ))}
-              </CardContent>
-            </Card>
+              </SelectContent>
+            </Select>
+          </CardContent>
+        </Card>
 
-            {/* Scale Control */}
-            <Card className="border-slate-600 bg-slate-800">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-sm">Global Scale</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="space-y-2">
-                  <Label className="text-slate-300 text-xs">Scale: {globalScale[0].toFixed(3)}</Label>
-                  <Slider
-                    value={globalScale}
-                    onValueChange={setGlobalScale}
-                    min={0.001}
-                    max={1}
-                    step={0.001}
-                    className="w-full"
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 text-xs text-white border-slate-500 hover:bg-slate-700 bg-transparent"
-                      onClick={() => setGlobalScale([0.01])}
-                    >
-                      1:100
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 text-xs text-white border-slate-500 hover:bg-slate-700 bg-transparent"
-                      onClick={() => setGlobalScale([0.1])}
-                    >
-                      1:10
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 text-xs text-white border-slate-500 hover:bg-slate-700 bg-transparent"
-                      onClick={() => setGlobalScale([1])}
-                    >
-                      1:1
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Global Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label>Global Scale</Label>
+                <span className="text-sm font-medium">{globalScale.toFixed(4)}</span>
+              </div>
+              <Slider
+                value={[globalScale * 10000]}
+                onValueChange={(v) => setGlobalScale(v[0] / 10000)}
+                min={1}
+                max={1000}
+                step={1}
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>0.0001</span>
+                <span>0.1000</span>
+              </div>
+            </div>
 
-            {/* Texture Controls */}
-            <Card className="border-slate-600 bg-slate-800">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-sm">Component Textures</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {Object.entries(componentTextures).map(([component, textureId]) => (
-                  <div key={component} className="space-y-1">
-                    <Label className="text-slate-300 text-xs capitalize">{component}</Label>
-                    <Select value={textureId} onValueChange={(value) => updateComponentTexture(component, value)}>
-                      <SelectTrigger className="h-8 text-xs bg-slate-700 border-slate-600 text-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-slate-700 border-slate-600">
-                        <div className="px-2 py-1 text-xs text-slate-400 font-medium">Wood Textures</div>
-                        {getWoodTextures().map((texture) => (
-                          <SelectItem key={texture.id} value={texture.id} className="text-white hover:bg-slate-600">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded bg-amber-600"></div>
-                              {texture.name}
-                            </div>
-                          </SelectItem>
-                        ))}
-                        <div className="px-2 py-1 text-xs text-slate-400 font-medium border-t border-slate-600 mt-1">
-                          Metal Textures
+            <div>
+              <Label className="text-sm mb-2 block">Manual Scale Input</Label>
+              <Input
+                type="number"
+                value={globalScale}
+                onChange={(e) => setGlobalScale(Number.parseFloat(e.target.value) || 0.01)}
+                step={0.001}
+                min={0.0001}
+                max={1}
+              />
+            </div>
+
+            <div className="pt-4 border-t">
+              <div className="flex items-center justify-between mb-2">
+                <Label>Global Array Multiplier</Label>
+                <span className="text-sm font-medium">{globalArrayMultiplier.toFixed(2)}x</span>
+              </div>
+              <Slider
+                value={[globalArrayMultiplier * 100]}
+                onValueChange={(v) => setGlobalArrayMultiplier(v[0] / 100)}
+                min={10}
+                max={300}
+                step={5}
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>0.1x</span>
+                <span>3.0x</span>
+              </div>
+              <p className="text-xs text-gray-600 mt-2">
+                Affects all array components (steps, treads). Current step count:{" "}
+                {getEffectiveCount("step", componentSettings, globalArrayMultiplier)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Component Settings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="step" className="w-full">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="base">Base</TabsTrigger>
+                <TabsTrigger value="step">Step</TabsTrigger>
+                <TabsTrigger value="step1">Tread</TabsTrigger>
+                <TabsTrigger value="top">Top</TabsTrigger>
+              </TabsList>
+
+              {Object.entries(modelConfig.components).map(([componentId, component]) => {
+                if (!component) return null
+                const settings = componentSettings[componentId]
+                const autoPosition = calculateAutoPosition(componentId, componentSettings)
+                const displayPosition = settings.followSteps && !settings.enabled ? autoPosition : settings.basePosition
+                const effectiveCount = getEffectiveCount(componentId, componentSettings, globalArrayMultiplier)
+
+                return (
+                  <TabsContent key={componentId} value={componentId} className="space-y-4">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-base font-semibold">{component.name}</Label>
+                        <div className="flex items-center gap-2">
+                          <Label className="text-sm">Array</Label>
+                          <input
+                            type="checkbox"
+                            checked={settings.enabled}
+                            onChange={(e) => updateComponentSetting(componentId, "enabled", e.target.checked)}
+                            className="w-4 h-4"
+                          />
                         </div>
-                        {getMetalTextures().map((texture) => (
-                          <SelectItem key={texture.id} value={texture.id} className="text-white hover:bg-slate-600">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded bg-gray-400"></div>
-                              {texture.name}
+                      </div>
+
+                      {!settings.enabled && (componentId === "step1" || componentId === "top") && (
+                        <div className="space-y-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-sm">Follow Step Array</Label>
+                            <input
+                              type="checkbox"
+                              checked={settings.followSteps}
+                              onChange={(e) => updateComponentSetting(componentId, "followSteps", e.target.checked)}
+                              className="w-4 h-4"
+                            />
+                          </div>
+                          {settings.followSteps && (
+                            <div className="flex items-center justify-between">
+                              <Label className="text-sm">Position at End (+1)</Label>
+                              <input
+                                type="checkbox"
+                                checked={settings.positionAtEnd}
+                                onChange={(e) => updateComponentSetting(componentId, "positionAtEnd", e.target.checked)}
+                                className="w-4 h-4"
+                              />
                             </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
+                          )}
+                          {settings.followSteps && (
+                            <p className="text-xs text-blue-600">
+                              {settings.positionAtEnd
+                                ? `Position: Step count (${effectiveCount})`
+                                : `Position: Last step (${effectiveCount - 1})`}
+                            </p>
+                          )}
+                        </div>
+                      )}
 
-            {/* Array Controls */}
-            <Card className="border-slate-600 bg-slate-800">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-sm">Array Settings</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Array Size */}
-                <div className="space-y-2">
-                  <Label className="text-slate-300 text-xs">Array Size: {arraySize[0]}</Label>
-                  <Slider value={arraySize} onValueChange={setArraySize} min={1} max={30} step={1} className="w-full" />
-                </div>
-
-                {/* Step Spacing with Input Fields */}
-                <div className="space-y-3">
-                  <Label className="text-slate-300 text-xs font-medium">Step Spacing</Label>
-                  {(["x", "y", "z"] as const).map((axis, index) => (
-                    <div key={axis} className="space-y-1">
-                      <Label className="text-slate-400 text-xs">
-                        {axis.toUpperCase()}: {stepSpacing[index].toFixed(3)}
-                      </Label>
-                      <div className="flex gap-2">
-                        <Slider
-                          value={[stepSpacing[index]]}
-                          onValueChange={([value]) => updateSpacing("step", axis, value)}
-                          min={-10}
-                          max={10}
-                          step={0.001}
-                          className="flex-1"
-                        />
-                        <Input
-                          type="number"
-                          value={stepSpacing[index].toFixed(3)}
-                          onChange={(e) => updateSpacingFromInput("step", axis, e.target.value)}
-                          className="w-16 h-6 text-xs bg-slate-700 border-slate-600 text-white"
-                          step="0.001"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Step1 Spacing with Input Fields */}
-                <div className="space-y-3">
-                  <Label className="text-slate-300 text-xs font-medium">Step1 Spacing</Label>
-                  {(["x", "y", "z"] as const).map((axis, index) => (
-                    <div key={axis} className="space-y-1">
-                      <Label className="text-slate-400 text-xs">
-                        {axis.toUpperCase()}: {step1Spacing[index].toFixed(3)}
-                      </Label>
-                      <div className="flex gap-2">
-                        <Slider
-                          value={[step1Spacing[index]]}
-                          onValueChange={([value]) => updateSpacing("step1", axis, value)}
-                          min={-10}
-                          max={10}
-                          step={0.001}
-                          className="flex-1"
-                        />
-                        <Input
-                          type="number"
-                          value={step1Spacing[index].toFixed(3)}
-                          onChange={(e) => updateSpacingFromInput("step1", axis, e.target.value)}
-                          className="w-16 h-6 text-xs bg-slate-700 border-slate-600 text-white"
-                          step="0.001"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Position Controls with Input Fields */}
-            <Card className="border-slate-600 bg-slate-800">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-sm">Base Positions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {Object.entries(positions).map(([component, [x, y, z]]) => (
-                  <div key={component} className="space-y-2">
-                    <h4 className="text-white text-xs font-medium capitalize">{component}</h4>
-                    {(["x", "y", "z"] as const).map((axis, index) => (
-                      <div key={axis} className="space-y-1">
-                        <Label className="text-slate-400 text-xs">
-                          {axis.toUpperCase()}: {[x, y, z][index].toFixed(3)}
-                        </Label>
-                        <div className="flex gap-2">
+                      {settings.enabled && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <Label>Base Array Count</Label>
+                            <span className="text-sm font-medium">{settings.count}</span>
+                          </div>
                           <Slider
-                            value={[[x, y, z][index]]}
-                            onValueChange={([value]) => updatePosition(component, axis, value)}
-                            min={-10}
-                            max={10}
-                            step={0.001}
-                            className="flex-1"
+                            value={[settings.count]}
+                            onValueChange={(v) => updateComponentSetting(componentId, "count", v[0])}
+                            min={1}
+                            max={50}
+                            step={1}
                           />
-                          <Input
-                            type="number"
-                            value={[x, y, z][index].toFixed(3)}
-                            onChange={(e) => updatePositionFromInput(component, axis, e.target.value)}
-                            className="w-16 h-6 text-xs bg-slate-700 border-slate-600 text-white"
-                            step="0.001"
-                          />
+                          {(componentId === "step" || componentId === "step1") && (
+                            <p className="text-xs text-gray-600 mt-1">
+                              Effective count with multiplier: {effectiveCount}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <Label>
+                          {settings.followSteps && !settings.enabled ? "Position (Auto-calculated)" : "Base Position"}
+                        </Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {["X", "Y", "Z"].map((axis, idx) => (
+                            <div key={axis}>
+                              <Label className="text-xs">{axis}</Label>
+                              <Input
+                                type="number"
+                                value={displayPosition[idx].toFixed(3)}
+                                onChange={(e) =>
+                                  updateComponentPosition(componentId, idx, Number.parseFloat(e.target.value) || 0)
+                                }
+                                step={0.1}
+                                className="text-xs"
+                                disabled={settings.followSteps && !settings.enabled}
+                              />
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
 
-            {/* Reset Controls */}
-            <Card className="border-slate-600 bg-slate-800">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-white text-sm">Reset</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs text-white border-slate-500 hover:bg-slate-700 bg-transparent"
-                  onClick={() => {
-                    setPositions({
-                      base: [0, 0, 0],
-                      step1: [0, 0, 0],
-                      step: [0, 0, 0],
-                      top: [0, 0, 0],
-                    })
-                    setStepSpacing([-10.133, 6.941, 0.0])
-                    setStep1Spacing([-10.133, 6.941, 0.3])
-                    setArraySize([8])
-                    setGlobalScale([0.01])
-                    setComponentTextures({
-                      base: "dark-cherry-wood",
-                      step: "dark-cherry-wood",
-                      step1: "painted-metal",
-                      top: "dark-cherry-wood",
-                    })
-                  }}
-                >
-                  Reset All
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+                      {settings.enabled && (
+                        <div className="space-y-2">
+                          <Label>Array Spacing</Label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {["X", "Y", "Z"].map((axis, idx) => (
+                              <div key={axis}>
+                                <Label className="text-xs">{axis}</Label>
+                                <Input
+                                  type="number"
+                                  value={settings.spacing[idx].toFixed(3)}
+                                  onChange={(e) =>
+                                    updateComponentSpacing(componentId, idx, Number.parseFloat(e.target.value) || 0)
+                                  }
+                                  step={0.1}
+                                  className="text-xs"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <Label className="text-sm mb-1 block">Texture</Label>
+                        <Select
+                          value={componentTextures[componentId] || component.defaultTexture}
+                          onValueChange={(value) =>
+                            setComponentTextures((prev) => ({
+                              ...prev,
+                              [componentId]: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableTextures.map((texture) => (
+                              <SelectItem key={texture.id} value={texture.id}>
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-4 h-4 rounded border"
+                                    style={{
+                                      background: texture.category === "wood" ? "#8B4513" : "#708090",
+                                    }}
+                                  />
+                                  <span>{texture.name}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </TabsContent>
+                )
+              })}
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        <div className="flex gap-2">
+          <Button onClick={handleSaveConfiguration} className="flex-1">
+            <Save className="w-4 h-4 mr-2" />
+            Save Test Config
+          </Button>
+          <Button onClick={handleResetToDefaults} variant="outline" className="flex-1 bg-transparent">
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Reset
+          </Button>
         </div>
+
+        <Button
+          onClick={handleClearConfiguration}
+          variant="outline"
+          className="w-full bg-transparent text-red-600 hover:text-red-700"
+        >
+          <Trash2 className="w-4 h-4 mr-2" />
+          Clear Saved Config
+        </Button>
+
+        <Button asChild variant="outline" className="w-full bg-transparent">
+          <Link href="/">
+            <Home className="w-4 h-4 mr-2" />
+            Back to Main View
+          </Link>
+        </Button>
       </div>
     </div>
   )
